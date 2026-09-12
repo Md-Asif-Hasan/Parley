@@ -196,3 +196,33 @@ Please provide the updated, complete replacement analysis JSON object based on t
         except Exception as e:
             logger.error(f"Error answering question: {e}", exc_info=True)
             return f"Error answering question: {str(e)}"
+
+    async def answer_multimodal(
+        self,
+        question: str,
+        image_base64: Optional[str],
+        transcript_text: str,
+        analysis: AnalysisResult
+    ) -> Dict[str, Any]:
+        """
+        Handles multimodal chat queries containing text instructions and/or image uploads.
+        Detects action plans (e.g. social media posting, message drafting) and generates response text.
+        """
+        from .autopilot.action_planner import classify_action_intent
+
+        trimmed_q = question.strip() if question else ""
+        action_plan = classify_action_intent(trimmed_q, image_base64)
+
+        if not trimmed_q and image_base64:
+            prompt_q = "Please inspect this attached image and summarize its content or how we can use it."
+        else:
+            prompt_q = trimmed_q
+
+        text_response = await self.answer_question(prompt_q, transcript_text, analysis)
+
+        return {
+            "text": text_response,
+            "has_image": bool(image_base64),
+            "action_plan": action_plan.to_dict() if action_plan else None
+        }
+

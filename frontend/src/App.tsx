@@ -7,11 +7,13 @@ import { SpeakerSummaries } from './components/SpeakerSummaries';
 import { ConflictsPanel } from './components/ConflictsPanel';
 import { DecisionsPanel } from './components/DecisionsPanel';
 import { AskAIPanel } from './components/AskAIPanel';
+import { AutopilotDrawer } from './components/AutopilotDrawer';
 import { AlertCircle, X, Sparkles, MessageSquare, Keyboard } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'analysis' | 'ask'>('analysis');
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [activeImageBase64, setActiveImageBase64] = useState<string | null>(null);
 
   const {
     meetingState,
@@ -19,6 +21,7 @@ export const App: React.FC = () => {
     isConnected,
     highlightedUtteranceIds,
     isAskingAI,
+    autopilotStatus,
     toastError,
     setToastError,
     startMeeting,
@@ -26,6 +29,9 @@ export const App: React.FC = () => {
     resetMeeting,
     renameSpeaker,
     askAgent,
+    askMultimodal,
+    executeAutopilot,
+    cancelAutopilot,
     sendAudioChunk,
     startSimulation,
     highlightUtterances,
@@ -260,12 +266,25 @@ export const App: React.FC = () => {
                   messages={meetingState.messages}
                   isAsking={isAskingAI}
                   onAsk={askAgent}
+                  onAskMultimodal={(q, img) => {
+                    setActiveImageBase64(img || null);
+                    askMultimodal(q, img);
+                  }}
+                  onExecutePlan={(plan, img) => executeAutopilot(plan, img || activeImageBase64 || undefined)}
                 />
               </div>
             )}
           </div>
         </section>
       </main>
+
+      {/* Floating Autopilot Status & Control Drawer */}
+      <AutopilotDrawer
+        autopilotStatus={autopilotStatus}
+        selectedImageBase64={activeImageBase64}
+        onExecute={(plan, img) => executeAutopilot(plan, img)}
+        onCancel={cancelAutopilot}
+      />
     </div>
   );
 };

@@ -61,6 +61,16 @@ async def handle_partial_transcript(text: str):
 async def handle_final_utterances(utterances: list[Utterance]):
     added = state_manager.add_utterances(utterances)
     await broadcast_event("transcript.final", {"utterances": [u.model_dump() for u in added]})
+    
+    # Check for voice speaker rename in new utterances
+    from .autopilot.voice_renamer import extract_speaker_rename
+    for u in added:
+        rename_res = extract_speaker_rename(u.text, u.speaker_id)
+        if rename_res:
+            target_spk, new_name = rename_res
+            logger.info(f"[Voice Renamer] Auto-renamed {target_spk} to '{new_name}' from speech: '{u.text}'")
+            state_manager.rename_speaker(target_spk, new_name)
+
     await broadcast_event("speaker.updated", {"speakers": state_manager.state.speakers})
 
 async def run_analysis_cycle():
@@ -299,6 +309,63 @@ async def websocket_meeting_endpoint(websocket: WebSocket):
                         answer = await agent.answer_question(question, transcript_text, state_manager.state.analysis)
                         state_manager.add_message(req_id, question, answer)
                         await broadcast_event("agent.answer", {"request_id": req_id, "text": answer})
+
+                elif event_type == "agent.ask_multimodal":
+                    req_id = event_data.get("request_id", "req-1")
+                    question = event_data.get("question", "").strip()
+                    image_base64 = event_data.get("image", None)
+                    logger.info(f"Multimodal question received: '{question}' (has_image: {bool(image_base64)})")
+                    transcript_text = state_manager.get_transcript_for_prompt()
+                    res = await agent.answer_multimodal(question, image_base64, transcript_text, state_manager.state.analysis)
+                    state_manager.add_message(req_id, question or "(Image Upload)", res["text"])
+                    await broadcast_event("agent.answer", {
+                        "request_id": req_id,
+                        "text": res["text"],
+                        "action_plan": res.get("action_plan")
+                    })
+
+                elif event_type == "autopilot.execute":
+                    plan = event_data.get("plan", {})
+                    image_base64 = event_data.get("image", None)
+                    action_type = plan.get("action_type")
+                    platform = plan.get("platform", "web")
+                    params = plan.get("params", {})
+                    
+                    logger.info(f"Executing autopilot task: {action_type} on {platform}")
+                    await broadcast_event("autopilot.status", {"status": "running", "step": "init", "message": f"Starting Autopilot on {platform}..."})
+                    
+                    async def step_reporter(step: str, msg: str):
+                        await broadcast_event("autopilot.step", {"step": step, "message": msg})
+                        
+                    image_paths = []
+                    if image_base64:
+                        from .autopilot.utils import save_base64_image
+                        img_path = save_base64_image(image_base64)
+                        image_paths.append(img_path)
+                        
+                    try:
+                        if action_type == "social_post":
+                            from .autopilot.browser_agent import BrowserAutopilot
+                            bot = BrowserAutopilot(step_callback=step_reporter)
+                            result = await bot.post_to_social(platform, params.get("text", ""), image_paths=image_paths, headless=False)
+                            await broadcast_event("autopilot.completed", {"success": result.get("success", True), "result": result})
+                        elif action_type == "chat_message":
+                            from .autopilot.browser_agent import BrowserAutopilot
+                            bot = BrowserAutopilot(step_callback=step_reporter)
+                            result = await bot.send_whatsapp_message(params.get("contact", ""), params.get("message", ""), headless=False)
+                            await broadcast_event("autopilot.completed", {"success": result.get("success", True), "result": result})
+                        else:
+                            from .autopilot.os_agent import OSAutopilot
+                            os_bot = OSAutopilot(step_callback=step_reporter)
+                            await os_bot.open_url_in_browser(f"https://www.{platform.lower()}.com")
+                            await broadcast_event("autopilot.completed", {"success": True, "message": f"Opened {platform}"})
+                    except Exception as err:
+                        logger.error(f"Autopilot execution error: {err}", exc_info=True)
+                        await broadcast_event("autopilot.failed", {"error": str(err)})
+
+                elif event_type == "autopilot.cancel":
+                    logger.info("Received autopilot.cancel event")
+                    await broadcast_event("autopilot.status", {"status": "cancelled", "message": "Autopilot operation cancelled."})
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected.")

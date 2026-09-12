@@ -15,7 +15,7 @@ if os.path.isdir(frontend_dist) and os.path.exists(os.path.join(frontend_dist, "
 
 for pkg in ["uvicorn", "fastapi", "starlette", "pydantic", "pydantic_settings",
             "websockets", "httpx", "anyio", "click", "h11",
-            "python_dotenv", "dotenv"]:
+            "python_dotenv", "dotenv", "playwright", "pyautogui", "mss", "pynput", "PIL"]:
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -24,7 +24,7 @@ for pkg in ["uvicorn", "fastapi", "starlette", "pydantic", "pydantic_settings",
     except Exception:
         pass
 
-for pkg in ["uvicorn", "fastapi", "starlette", "pydantic", "anyio", "websockets"]:
+for pkg in ["uvicorn", "fastapi", "starlette", "pydantic", "anyio", "websockets", "app.autopilot"]:
     hiddenimports += collect_submodules(pkg)
 
 hiddenimports += [
@@ -40,6 +40,9 @@ hiddenimports += [
     "app", "app.main", "app.config", "app.models",
     "app.state", "app.agent", "app.deepgram_client", "app.mock_data",
     "app.exa_client",
+    "app.autopilot", "app.autopilot.action_planner", "app.autopilot.browser_agent",
+    "app.autopilot.os_agent", "app.autopilot.voice_renamer", "app.autopilot.utils",
+    "PIL", "PIL.Image", "pyautogui", "mss", "pynput",
     "dotenv",
 ]
 
@@ -55,7 +58,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "numpy", "scipy", "PIL", "cv2",
+    excludes=["tkinter", "matplotlib", "numpy", "scipy", "cv2",
               "pytest", "pytest_asyncio", "_pytest"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

@@ -28,11 +28,29 @@ export interface AnalysisResult {
   decisions: Decision[];
 }
 
+export interface ActionPlan {
+  action_type: 'social_post' | 'chat_message' | 'email' | 'calendar' | 'os_command';
+  platform: string;
+  description: string;
+  params: Record<string, any>;
+  requires_confirmation: boolean;
+}
+
+export interface AutopilotStatus {
+  isActive: boolean;
+  status: 'idle' | 'planning' | 'running' | 'completed' | 'failed' | 'cancelled';
+  step?: string;
+  message?: string;
+  plan?: ActionPlan | null;
+}
+
 export interface AgentMessage {
   request_id: string;
   question: string;
   answer: string;
   timestamp: number;
+  image?: string;
+  action_plan?: ActionPlan | null;
 }
 
 export type MeetingStatus = 'idle' | 'recording' | 'processing' | 'stopped' | 'error';

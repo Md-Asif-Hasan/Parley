@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MeetingState, MeetingStatus, Utterance, AnalysisResult, WSEvent } from '../types/meeting';
+import { MeetingState, MeetingStatus, Utterance, AnalysisResult, WSEvent, AutopilotStatus, ActionPlan } from '../types/meeting';
 
 const INITIAL_STATE: MeetingState = {
   transcript: [],
@@ -14,6 +14,14 @@ const INITIAL_STATE: MeetingState = {
   status_message: undefined
 };
 
+const INITIAL_AUTOPILOT: AutopilotStatus = {
+  isActive: false,
+  status: 'idle',
+  step: undefined,
+  message: undefined,
+  plan: null
+};
+
 export function useMeetingSocket() {
   const [meetingState, setMeetingState] = useState<MeetingState>(INITIAL_STATE);
   const [partialTranscript, setPartialTranscript] = useState<string>('');
@@ -21,6 +29,7 @@ export function useMeetingSocket() {
   const [highlightedUtteranceIds, setHighlightedUtteranceIds] = useState<string[]>([]);
   const [isAskingAI, setIsAskingAI] = useState<boolean>(false);
   const [toastError, setToastError] = useState<string | null>(null);
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>(INITIAL_AUTOPILOT);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
@@ -118,8 +127,58 @@ export function useMeetingSocket() {
                   question: data.question || '',
                   answer: data.text,
                   timestamp: Date.now() / 1000,
+                  action_plan: data.action_plan || null,
                 },
               ],
+            }));
+            if (data.action_plan) {
+              setAutopilotStatus({
+                isActive: true,
+                status: 'planning',
+                step: 'ready',
+                message: `Ready to execute: ${data.action_plan.description}`,
+                plan: data.action_plan
+              });
+            }
+            break;
+
+          case 'autopilot.status':
+            setAutopilotStatus((prev) => ({
+              ...prev,
+              isActive: data.status === 'running' || data.status === 'planning',
+              status: data.status,
+              step: data.step || prev.step,
+              message: data.message || prev.message,
+            }));
+            break;
+
+          case 'autopilot.step':
+            setAutopilotStatus((prev) => ({
+              ...prev,
+              isActive: true,
+              status: 'running',
+              step: data.step,
+              message: data.message,
+            }));
+            break;
+
+          case 'autopilot.completed':
+            setAutopilotStatus((prev) => ({
+              ...prev,
+              isActive: false,
+              status: 'completed',
+              step: 'done',
+              message: data.message || 'Task completed successfully! ✅',
+            }));
+            break;
+
+          case 'autopilot.failed':
+            setAutopilotStatus((prev) => ({
+              ...prev,
+              isActive: false,
+              status: 'failed',
+              step: 'error',
+              message: data.error || 'Autopilot encountered an error.',
             }));
             break;
 
@@ -190,6 +249,33 @@ export function useMeetingSocket() {
     sendEvent('agent.ask', { request_id: requestId, question });
   }, [sendEvent]);
 
+  const askMultimodal = useCallback((question: string, imageBase64?: string) => {
+    const requestId = `req_${Date.now()}`;
+    setIsAskingAI(true);
+    sendEvent('agent.ask_multimodal', { request_id: requestId, question, image: imageBase64 });
+  }, [sendEvent]);
+
+  const executeAutopilot = useCallback((plan: ActionPlan, imageBase64?: string) => {
+    setAutopilotStatus({
+      isActive: true,
+      status: 'running',
+      step: 'starting',
+      message: `Executing ${plan.description}...`,
+      plan
+    });
+    sendEvent('autopilot.execute', { plan, image: imageBase64 });
+  }, [sendEvent]);
+
+  const cancelAutopilot = useCallback(() => {
+    setAutopilotStatus((prev) => ({
+      ...prev,
+      isActive: false,
+      status: 'cancelled',
+      message: 'Autopilot cancelled by user.'
+    }));
+    sendEvent('autopilot.cancel');
+  }, [sendEvent]);
+
   const startSimulation = useCallback(() => {
     sendEvent('simulation.start');
   }, [sendEvent]);
@@ -208,6 +294,7 @@ export function useMeetingSocket() {
     isConnected,
     highlightedUtteranceIds,
     isAskingAI,
+    autopilotStatus,
     toastError,
     setToastError,
     startMeeting,
@@ -215,6 +302,9 @@ export function useMeetingSocket() {
     resetMeeting,
     renameSpeaker,
     askAgent,
+    askMultimodal,
+    executeAutopilot,
+    cancelAutopilot,
     sendAudioChunk,
     startSimulation,
     highlightUtterances,
