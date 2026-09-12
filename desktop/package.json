@@ -1,0 +1,84 @@
+{
+  "name": "parley-desktop",
+  "version": "1.0.0",
+  "description": "Parley - Real-time AI Meeting Assistant Desktop Application",
+  "main": "main.cjs",
+  "author": "Md-Asif-Hasan",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "build-backend:win": "cd ../backend && pyinstaller parley_server.spec --distpath dist --workpath build/pyinstaller --noconfirm",
+    "build-backend:unix": "cd ../backend && pyinstaller parley_server.spec --distpath dist --workpath build/pyinstaller --noconfirm",
+    "dist:full:win": "npm run build-backend:win && npm run dist:win"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^30.0.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.parley.meetingassistant",
+    "productName": "Parley",
+    "directories": {
+      "output": "dist"
+    },
+    "icon": "icon.ico",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "icon.ico",
+      "icon.png",
+      "../frontend/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/parley-server.exe",
+        "to": "parley-server.exe",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "static",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "mac": {
+      "extraResources": [
+        {
+          "from": "../backend/dist/parley-server",
+          "to": "parley-server"
+        }
+      ],
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "extraResources": [
+        {
+          "from": "../backend/dist/parley-server",
+          "to": "parley-server"
+        }
+      ],
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Utility"
+    }
+  }
+}
