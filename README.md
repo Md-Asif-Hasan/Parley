@@ -1,12 +1,79 @@
-# Parley-
+# Parley
 Parley sits passively in the room during a meeting, listens to everyone, keeps per-person notes, flags when people are talking past each other (different ideas or conflicting schedules), and can be asked directly for its take — all visualized on a live shared whiteboard.
+
+## Whiteboard frontend
+
+`frontend/` contains the React + TypeScript card-based meeting canvas from the
+MVP plan: speaker-colored transcripts, running summary and perspectives,
+Exa reference cards, and highlights. It supports start/end, elapsed time,
+speaker renaming, source-to-transcript navigation, and JSON export/import.
+Desktop uses three columns; smaller screens stack the sections.
+
+**Only the conversation is mocked. All analysis and search are live.** Start
+connects to the local FastAPI WebSocket backend, then replays 33 seconds of sample
+speech. The backend echoes partial/final transcripts and feeds finalized text to
+the real `AgentLoop`. DeepSeek generates summaries, perspectives, decisions and
+highlights; the agent decides when to search, and Exa supplies the actual results.
+There are no hardcoded analysis/search results or offline fallback responses.
+Missing Exa configuration fails the session instead of silently disabling search.
+
+End cancels remaining sample speech and waits for final analysis and any active
+search before the backend exports and closes the session. Partial draft speech is
+not finalized artificially. Disconnect aborts pending work. Errors remain visible;
+earlier successful analysis can remain on screen with its transcript coverage.
+The microphone and Deepgram are still not connected.
+
+From the repository root, install dependencies outside the repository:
+
+```powershell
+# Terminal 1: real backend (reads ../parley.local.json automatically)
+$env:PYTHONPYCACHEPREFIX = (Join-Path (Resolve-Path ..) '.pycache')
+..\.venv\Scripts\python.exe -m pip install --cache-dir ..\.pip-cache "fastapi>=0.115,<1" "uvicorn>=0.30,<1" "websockets>=14,<17"
+..\.venv\Scripts\python.exe -m uvicorn parley_agent.server:app --host 127.0.0.1 --port 8000
+
+# Terminal 2: frontend
+npm install --prefix .. --cache ..\.npm-cache react@19 react-dom@19 @types/react@19 @types/react-dom@19 typescript@5.9 vite@7
+cd frontend
+npm run dev
+# Validate types and produce ../whiteboard-dist relative to the repository:
+npm run build
+```
+
+Open `http://127.0.0.1:5173`. Dependencies resolve from the parent `node_modules`;
+Vite cache and build output also live outside the repository. The frontend's
+`package.json` declares its dependencies for a conventional install elsewhere.
+
+Use **Load agent export** to inspect an existing `AgentLoop.export()` JSON, such
+as the local `../ideas-highlights-export.json`. Files are read in the browser,
+without upload. The exported speaker mapping is optional. An imported meeting
+is a saved snapshot and is not described as live recording.
+
+`frontend/src/state.ts` defines the event boundary. `reduceEvent` consumes
+`transcript.final`, `transcript.partial`, `analysis.updated`, `search.updated`,
+`status`, `meeting.export`, and `error`. Analysis replaces the previous snapshot; search cards are
+upserted by ID and repeated finalized utterance IDs are deduplicated. Analysis
+shows how many transcript entries it covers. The frontend partial convention is
+`{type: "transcript.partial", data: {speaker_id, text}}`.
+
+`frontend/src/session.ts` connects to `/ws/meeting`, proxied by Vite to port 8000.
+The backend starts one real loop per connection and emits `status: recording`;
+only then does `demo.ts` replay speech. The browser sends `meeting.stop` when
+the replay ends or End is clicked. The server emits `processing`, the final
+analysis, `stopped`, and `meeting.export`, then closes the socket. Searches run
+independently of transcript ingestion. Their results may arrive during finalization.
+
+For the next middleware step, replace the speech replay with Deepgram normalized
+events and follow the Deepgram flush lifecycle described below. Ask AI is not part of this frontend
+iteration; its backend API remains available. This is a card canvas, not a
+draggable infinite board. Google Stitch was unavailable in the tool session;
+the interface was implemented directly in this repository.
 
 ## LLM Agent Loop
 
 The implemented component is **downstream of Deepgram**. It consumes finalized,
 normalized text and emits analysis, answer, and search events. It does not capture
-audio, connect to Deepgram, or serve a frontend. Import it into the eventual FastAPI
-backend; no extra service or agent framework is required.
+audio or connect to Deepgram. `parley_agent/server.py` now imports it into the
+local FastAPI backend; no extra service or agent framework is required.
 
 The local default is **DeepSeek V4.1 Flash** (`deepseek-flash`) through the OpenAI
 Python SDK. Network search uses **Exa**, never the OpenAI built-in search tool.
