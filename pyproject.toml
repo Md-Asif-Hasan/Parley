@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parley-agent"
+version = "0.1.0"
+description = "Meeting analysis downstream of finalized Deepgram transcripts"
+requires-python = ">=3.11"
+dependencies = ["openai>=2.0,<3", "pydantic>=2.8,<3", "httpx>=0.27,<1"]
+
+[project.scripts]
+parley-agent = "parley_agent.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["parley_agent*"]
