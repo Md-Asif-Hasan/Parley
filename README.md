@@ -1,8 +1,21 @@
 # Parley 🎙️💬
 
-**Parley** is a real-time meeting assistant and opinion analyzer that listens to discussions (2–5 participants), displays live speaker-labelled transcripts, summarizes participant views, flags potential scheduling or proposal conflicts, highlights agreed consensus decisions, and answers grounded questions about the meeting with live web intelligence.
+**Parley** is a real-time meeting assistant, opinion analyzer, and autonomous desktop action executor that listens to discussions (2–5 participants), displays live speaker-labelled transcripts, summarizes participant views, flags potential conflicts, highlights consensus decisions, and executes automated computer actions on command.
 
-Parley is available as a **Web Application**, a **Single-Container Docker App**, and a **Native Self-Contained Desktop Application** for Windows, macOS, and Linux.
+Parley is available as a **Native Desktop Application for Windows** (with macOS/Linux support), a **Single-Container Docker App**, and a **Web Application**.
+
+---
+
+## 🚀 Quick Download & Install (Windows)
+
+Download the ready-to-run desktop application from [**GitHub Releases**](https://github.com/Md-Asif-Hasan/Parley/releases):
+
+| File | Type | Description |
+|---|---|---|
+| 📦 [**`Parley Setup 1.0.0.exe`**](https://github.com/Md-Asif-Hasan/Parley/releases/latest) | **NSIS Installer** | Recommended. Installs Parley with desktop shortcuts, auto-start, and uninstaller. |
+| ⚡ [**`Parley 1.0.0.exe`**](https://github.com/Md-Asif-Hasan/Parley/releases/latest) | **Portable Executable** | Standalone zero-install executable. Runs immediately without installation. |
+
+> **Zero Dependencies**: Parley includes an embedded Python backend runtime and Chromium automation engine. No Python or Node.js installation is required on the user machine!
 
 ---
 
@@ -10,7 +23,7 @@ Parley is available as a **Web Application**, a **Single-Container Docker App**,
 
 | Branch | Status | Description |
 |---|---|---|
-| **`master`** | 🌟 **Finished / Production Version** | Full complete release: Deepgram Nova-3 speech diarization, DeepSeek intelligence, Exa Neural Web Search, custom brand logo, PyInstaller self-contained backend binary, Docker containerization, and packaged Electron desktop installers (`.exe`, `.dmg`, `.AppImage`). |
+| **`master`** | 🌟 **Finished / Production Version** | Full complete release: Deepgram Nova-3 speech diarization, DeepSeek intelligence, Exa Neural Web Search, Autopilot OS & browser automation, Multimodal Image Chat, voice speaker renaming, PyInstaller self-contained backend binary, Docker containerization, and packaged Electron desktop installers. |
 | **`main`** | 🧪 **Demo / Prototype Version** | Baseline MVP prototype and developmental iteration history. |
 
 ---
@@ -19,13 +32,17 @@ Parley is available as a **Web Application**, a **Single-Container Docker App**,
 
 - **Live Streaming Diarization**: Low-latency speech capture with Deepgram Nova-3 (`diarize=true`, `utterance_end_ms=5000`).
 - **Real-Time Interim Captions**: See live drafting captions that fluidly finalize into speaker-attributed transcript blocks.
+- **Voice-Driven Speaker Renaming**: Spoken self-introductions (*"Hi, my name is Alex..."*, *"I am Sarah from design"*) and explicit commands (*"Speaker 1 is Bob"*) automatically update participant names in real time.
 - **Dynamic Insight Extraction**: Periodic AI analysis powered by DeepSeek (`deepseek-chat`) detailing participant viewpoints, incompatible proposal warnings, and consensus checklists.
 - **Exa Neural Web Search & Scraping**: Built-in Exa AI search engine that automatically looks up unknown processes, technologies, documentation, and external facts in real time, synthesizing raw web data into human-readable insights with citations.
+- **Autonomous Autopilot Engine**:
+  - **Browser Automation**: Automated social posting (Twitter/X, LinkedIn, Facebook), messaging (WhatsApp Web, Telegram), and web actions using persistent Chromium profiles (`~/.parley/browser_profile`) that remember your logins.
+  - **OS & Screen Control**: Full-screen vision, screenshot inspection, and mouse/keyboard automation via PyAutoGUI & mss with global `Esc` emergency stop.
+  - **Intent Classification**: Converts meeting agreements, action items, and chat commands into structured execution blueprints.
+- **Multimodal Ask AI Panel**: Ask grounded questions using text or attached images (via drag-and-drop, file picker, or `Ctrl+V` clipboard paste).
 - **Interactive Source Citations**: Click any `[u1, u3]` citation badge on a conflict or decision card to scroll and highlight the supporting utterances in the transcript.
-- **Grounded Q&A**: Ask natural language questions with responses strictly grounded in the meeting context and live web search.
-- **Self-Contained Desktop App**: Native Electron shell with PyInstaller embedded Python runtime — runs on any Windows/macOS/Linux machine with **zero dependencies or Python installation required**.
+- **Self-Contained Desktop App**: Native Electron shell with PyInstaller embedded Python runtime — runs on any Windows machine with zero setup.
 - **Export**: One-click download of the complete meeting state and analysis as JSON.
-- **Desktop UX & Shortcuts**: Frameless dark-mode UI with custom application branding and global keyboard shortcuts.
 
 ---
 
@@ -54,9 +71,16 @@ Parley/
 │   │   ├── agent.py                  # DeepSeek LLM agent loop & QA engine
 │   │   ├── deepgram_client.py        # Deepgram Nova-3 live WebSocket client
 │   │   ├── exa_client.py             # Exa AI Neural Web Search & content scraper
-│   │   └── mock_data.py              # Offline multi-speaker meeting simulation
+│   │   ├── mock_data.py              # Offline multi-speaker meeting simulation
+│   │   └── autopilot/                # Autonomous Agent System
+│   │       ├── action_planner.py     # Intent classifier & blueprint generator
+│   │       ├── browser_agent.py      # Playwright persistent-profile browser control
+│   │       ├── os_agent.py           # PyAutoGUI + mss screen/keyboard/mouse agent
+│   │       ├── voice_renamer.py      # Speech-driven speaker identification regex engine
+│   │       └── utils.py              # Base64 image & media helpers
 │   └── tests/
 │       ├── test_agent.py             # Unit tests for agent analysis & QA
+│       ├── test_autopilot.py         # Unit tests for intent classification & renamer
 │       ├── test_models.py            # Unit tests for schemas & state manager
 │       └── test_websocket.py         # Unit tests for REST & WebSocket endpoints
 │
@@ -80,7 +104,8 @@ Parley/
 │       │   ├── SpeakerSummaries.tsx  # Per-participant viewpoints & summaries
 │       │   ├── ConflictsPanel.tsx    # Potential scheduling & proposal conflicts
 │       │   ├── DecisionsPanel.tsx    # Consensus agreements checklist
-│       │   └── AskAIPanel.tsx        # Grounded Q&A with Exa Web Search live badge
+│       │   ├── AskAIPanel.tsx        # Multimodal Q&A with image upload & Exa Web Search
+│       │   └── AutopilotDrawer.tsx   # Floating execution status drawer & emergency stop
 │       ├── hooks/
 │       │   ├── useAudioRecorder.ts   # Browser MediaRecorder PCM stream hook
 │       │   └── useMeetingSocket.ts   # WebSocket client connection & state sync hook
