@@ -31,7 +31,7 @@ export function reduceEvent(state: State, event: MeetingEvent): State {
       event.data.utterances.forEach(u => { if (!entries.has(u.id)) entries.set(u.id, u); });
       return { ...state, partial: null, transcript: [...entries.values()].sort((a, b) => a.start - b.start || a.end - b.end || a.id.localeCompare(b.id)) };
     }
-    case 'transcript.partial': return { ...state, partial: event.data };
+    case 'transcript.partial': return { ...state, partial: event.data.text ? event.data : null };
     case 'analysis.updated': return event.data.based_on_transcript_version < state.analysis.based_on_transcript_version ? state : { ...state, analysis: event.data, error: null };
     case 'search.updated': return { ...state, searches: [...state.searches.filter(s => s.id !== event.data.id), event.data] };
     case 'status': return { ...state, status: event.data.state, partial: ['processing', 'stopped', 'error'].includes(event.data.state) ? null : state.partial };

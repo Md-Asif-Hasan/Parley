@@ -9,19 +9,31 @@ Exa reference cards, and highlights. It supports start/end, elapsed time,
 speaker renaming, source-to-transcript navigation, and JSON export/import.
 Desktop uses three columns; smaller screens stack the sections.
 
-**Only the conversation is mocked. All analysis and search are live.** Start
-connects to the local FastAPI WebSocket backend, then replays 33 seconds of sample
-speech. The backend echoes partial/final transcripts and feeds finalized text to
-the real `AgentLoop`. DeepSeek generates summaries, perspectives, decisions and
-highlights; the agent decides when to search, and Exa supplies the actual results.
-There are no hardcoded analysis/search results or offline fallback responses.
-Missing Exa configuration fails the session instead of silently disabling search.
+**The microphone, transcription, analysis and search are all live.** Start asks
+for browser microphone permission and connects to the local backend. Deepgram
+Nova-3 transcribes the audio with exactly these query options:
+`diarize=true&punctuate=true&interim_results=true&smart_format=true&model=nova-3`.
+The plan's English-first default is retained (no language override).
 
-End cancels remaining sample speech and waits for final analysis and any active
-search before the backend exports and closes the session. Partial draft speech is
-not finalized artificially. Disconnect aborts pending work. Errors remain visible;
-earlier successful analysis can remain on screen with its transcript coverage.
-The microphone and Deepgram are still not connected.
+The browser sends MediaRecorder container audio every 250 ms. The backend does
+not pretend compressed audio is raw PCM: `encoding` and `sample_rate` are omitted.
+Interim captions are replaced in place; finalized word runs are split by speaker,
+assigned stable utterance IDs, and sent to the real AgentLoop. Speaker labels and
+colors appear automatically; names can be edited. Unknown speakers remain unknown.
+
+DeepSeek generates summaries and highlights; Exa supplies actual search results.
+No simulated conversation, hardcoded analysis, or fallback output is used.
+End stops MediaRecorder, sends its final audio blob, then sends `meeting.stop`.
+The backend sends Deepgram `CloseStream` and drains final results and metadata
+before calling `AgentLoop.stop()`. A failed/timed-out flush is reported as an
+error, not a completed meeting. Disconnect releases microphone tracks and cancels
+backend tasks. Provider failures remain visible with any previous real analysis.
+
+The Deepgram key is read from `DEEPGRAM_API_KEY` or `deepgram_api_key` in the
+existing **parent** `parley.local.json`, alongside the DeepSeek and Exa keys.
+Use localhost (or HTTPS) for browser microphone access; allow the permission
+prompt when clicking Start. The browser chooses a supported WebM/Opus, Ogg/Opus,
+or MP4 container; no synthetic audio fallback is provided.
 
 From the repository root, install dependencies outside the repository:
 
@@ -56,14 +68,12 @@ shows how many transcript entries it covers. The frontend partial convention is
 `{type: "transcript.partial", data: {speaker_id, text}}`.
 
 `frontend/src/session.ts` connects to `/ws/meeting`, proxied by Vite to port 8000.
-The backend starts one real loop per connection and emits `status: recording`;
-only then does `demo.ts` replay speech. The browser sends `meeting.stop` when
-the replay ends or End is clicked. The server emits `processing`, the final
-analysis, `stopped`, and `meeting.export`, then closes the socket. Searches run
-independently of transcript ingestion. Their results may arrive during finalization.
+The backend opens Deepgram and starts one loop per connection. After it emits
+`status: recording`, the browser begins sending binary microphone audio. Only
+Deepgram can produce transcript events on this endpoint; client text transcripts
+are rejected. `meeting.export` includes Deepgram's request metadata.
 
-For the next middleware step, replace the speech replay with Deepgram normalized
-events and follow the Deepgram flush lifecycle described below. Ask AI is not part of this frontend
+Ask AI is not part of this frontend
 iteration; its backend API remains available. This is a card canvas, not a
 draggable infinite board. Google Stitch was unavailable in the tool session;
 the interface was implemented directly in this repository.
@@ -72,7 +82,7 @@ the interface was implemented directly in this repository.
 
 The implemented component is **downstream of Deepgram**. It consumes finalized,
 normalized text and emits analysis, answer, and search events. It does not capture
-audio or connect to Deepgram. `parley_agent/server.py` now imports it into the
+audio itself. `parley_agent/deepgram.py` handles Deepgram and `server.py` imports the loop into the
 local FastAPI backend; no extra service or agent framework is required.
 
 The local default is **DeepSeek V4.1 Flash** (`deepseek-flash`) through the OpenAI
@@ -337,3 +347,19 @@ the first run, including its unanswered question.
 Reference APIs: [DeepSeek models](https://api-docs.deepseek.com/quick_start/pricing/),
 [DeepSeek Responses compatibility](https://api-docs.deepseek.com/guides/responses_api/),
 [Exa Search](https://exa.ai/docs/reference/search).
+
+### Deepgram input verification
+
+Normalization and transport tests cover consecutive speaker changes, interim vs
+final results, duplicate finals, punctuation, unknown speakers, audio forwarding,
+late final transcripts before analysis, flush failure, and disconnect cleanup.
+Deepgram control/encoding references: [CloseStream](https://developers.deepgram.com/docs/close-stream),
+[container audio](https://developers.deepgram.com/docs/encoding),
+[diarization](https://developers.deepgram.com/docs/diarization).
+
+Live verification used Deepgram's public sample audio through the actual local
+WebSocket endpoint: five finalized utterances, two speaker labels, and current
+DeepSeek analysis. Artifacts are outside Git: `../deepgram-live-export.json` and
+`../deepgram-live-events.json`. A finite audio container can also end normally
+with Deepgram metadata before `meeting.stop`; that path finalizes the meeting.
+Physical microphone permission and room diarization still require a local trial.
