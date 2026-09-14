@@ -1,4 +1,4 @@
-import { Mic, Square, Download, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
+import { Mic, Square, Download, RefreshCw, Sparkles, AlertCircle, Settings as SettingsIcon } from 'lucide-react';
 import { MeetingStatus } from '../types/meeting';
 import { AudioVisualizer } from './AudioVisualizer';
 
@@ -13,6 +13,7 @@ interface HeaderProps {
   onStartSimulation: () => void;
   onReset: () => void;
   onExport: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onStartSimulation,
   onReset,
   onExport,
+  onOpenSettings,
 }) => {
   const getStatusBadge = () => {
     switch (status) {
@@ -142,6 +144,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition rounded-lg"
+              title="API Keys & Settings"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </header>

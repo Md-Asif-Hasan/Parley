@@ -162,8 +162,40 @@ async def health_check():
         "status": "ok",
         "has_deepgram_key": bool(settings.DEEPGRAM_API_KEY),
         "has_llm_key": bool(settings.DEEPSEEK_API_KEY or settings.OPENAI_API_KEY),
+        "has_exa_key": bool(settings.EXA_API_KEY),
         "deepgram_model": settings.DEEPGRAM_MODEL,
         "llm_model": settings.DEEPSEEK_MODEL or settings.OPENAI_MODEL
+    }
+
+@app.get("/api/settings")
+async def get_settings_endpoint():
+    from .config import settings, reload_settings
+    reload_settings()
+    return {
+        "has_deepgram_key": bool(settings.DEEPGRAM_API_KEY),
+        "has_deepseek_key": bool(settings.DEEPSEEK_API_KEY),
+        "has_exa_key": bool(settings.EXA_API_KEY),
+        "deepgram_key_masked": f"{settings.DEEPGRAM_API_KEY[:4]}...{settings.DEEPGRAM_API_KEY[-4:]}" if len(settings.DEEPGRAM_API_KEY) > 8 else ("configured" if settings.DEEPGRAM_API_KEY else ""),
+        "deepseek_key_masked": f"{settings.DEEPSEEK_API_KEY[:4]}...{settings.DEEPSEEK_API_KEY[-4:]}" if len(settings.DEEPSEEK_API_KEY) > 8 else ("configured" if settings.DEEPSEEK_API_KEY else ""),
+        "exa_key_masked": f"{settings.EXA_API_KEY[:4]}...{settings.EXA_API_KEY[-4:]}" if len(settings.EXA_API_KEY) > 8 else ("configured" if settings.EXA_API_KEY else ""),
+    }
+
+@app.post("/api/settings")
+async def save_settings_endpoint(payload: dict):
+    from .config import save_api_keys
+    deepgram_key = payload.get("deepgram_api_key")
+    deepseek_key = payload.get("deepseek_api_key")
+    exa_key = payload.get("exa_api_key")
+    new_settings = save_api_keys(
+        deepgram_key=deepgram_key.strip() if deepgram_key is not None else None,
+        deepseek_key=deepseek_key.strip() if deepseek_key is not None else None,
+        exa_key=exa_key.strip() if exa_key is not None else None,
+    )
+    return {
+        "status": "saved",
+        "has_deepgram_key": bool(new_settings.DEEPGRAM_API_KEY),
+        "has_deepseek_key": bool(new_settings.DEEPSEEK_API_KEY),
+        "has_exa_key": bool(new_settings.EXA_API_KEY),
     }
 
 @app.get("/api/state")
@@ -227,17 +259,19 @@ async def websocket_meeting_endpoint(websocket: WebSocket):
                     await broadcast_event("status", {"state": "recording", "message": "Recording started."})
 
                     # Start Deepgram streaming client if API key is present
-                    if settings.DEEPGRAM_API_KEY:
+                    from .config import reload_settings
+                    curr_settings = reload_settings()
+                    if curr_settings.DEEPGRAM_API_KEY:
                         try:
                             deepgram_client = DeepgramLiveClient(
-                                api_key=settings.DEEPGRAM_API_KEY,
+                                api_key=curr_settings.DEEPGRAM_API_KEY,
                                 on_partial=handle_partial_transcript,
                                 on_final=handle_final_utterances,
                                 id_generator=state_manager.next_utterance_id,
                                 sample_rate=sample_rate,
                                 encoding=encoding,
-                                model=settings.DEEPGRAM_MODEL,
-                                utterance_end_ms=settings.DEEPGRAM_UTTERANCE_END_MS
+                                model=curr_settings.DEEPGRAM_MODEL,
+                                utterance_end_ms=curr_settings.DEEPGRAM_UTTERANCE_END_MS
                             )
                             await deepgram_client.start()
                         except Exception as e:

@@ -8,11 +8,13 @@ import { ConflictsPanel } from './components/ConflictsPanel';
 import { DecisionsPanel } from './components/DecisionsPanel';
 import { AskAIPanel } from './components/AskAIPanel';
 import { AutopilotDrawer } from './components/AutopilotDrawer';
+import { SettingsModal } from './components/SettingsModal';
 import { AlertCircle, X, Sparkles, MessageSquare, Keyboard } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'analysis' | 'ask'>('analysis');
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [activeImageBase64, setActiveImageBase64] = useState<string | null>(null);
 
   const {
@@ -146,6 +148,7 @@ export const App: React.FC = () => {
         onStartSimulation={handleStartSimulation}
         onReset={handleReset}
         onExport={handleExport}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {/* Error Toasts / Warnings */}
@@ -155,12 +158,22 @@ export const App: React.FC = () => {
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             <span>{toastError || recordingError}</span>
           </div>
-          <button
-            onClick={() => setToastError(null)}
-            className="p-1 hover:bg-rose-900/60 rounded text-rose-300"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {(toastError?.includes('KEY') || toastError?.includes('key')) && (
+              <button
+                onClick={() => setShowSettings(true)}
+                className="px-2 py-0.5 text-[11px] font-medium bg-rose-900/80 hover:bg-rose-800 text-rose-100 rounded border border-rose-600 transition"
+              >
+                Configure Keys ⚙️
+              </button>
+            )}
+            <button
+              onClick={() => setToastError(null)}
+              className="p-1 hover:bg-rose-900/60 rounded text-rose-300"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -284,6 +297,12 @@ export const App: React.FC = () => {
         selectedImageBase64={activeImageBase64}
         onExecute={(plan, img) => executeAutopilot(plan, img)}
         onCancel={cancelAutopilot}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );
