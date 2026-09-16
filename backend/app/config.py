@@ -36,6 +36,14 @@ class Settings(BaseSettings):
 
     EXA_API_KEY: str = os.getenv("EXA_API_KEY", "")
 
+    # Local Free Mode Configuration
+    STT_ENGINE: str = os.getenv("STT_ENGINE", "auto")  # auto, deepgram, whisper
+    WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", "base.en")
+    LLM_ENGINE: str = os.getenv("LLM_ENGINE", "auto")  # auto, deepseek, ollama
+    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "deepseek-r1:1.5b")
+    SEARCH_ENGINE: str = os.getenv("SEARCH_ENGINE", "auto")  # auto, exa, duckduckgo
+
     ANALYSIS_INTERVAL_SECONDS: int = int(os.getenv("ANALYSIS_INTERVAL_SECONDS", "15"))
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -55,8 +63,14 @@ def save_api_keys(
     deepgram_key: Optional[str] = None,
     deepseek_key: Optional[str] = None,
     exa_key: Optional[str] = None,
+    stt_engine: Optional[str] = None,
+    whisper_model: Optional[str] = None,
+    llm_engine: Optional[str] = None,
+    ollama_base_url: Optional[str] = None,
+    ollama_model: Optional[str] = None,
+    search_engine: Optional[str] = None,
 ):
-    """Saves API keys to ~/.parley/.env and reloads the active runtime settings."""
+    """Saves API keys and engine configuration to ~/.parley/.env and reloads active runtime settings."""
     env_file = get_persistent_env_path()
     existing_lines = []
     if env_file.is_file():
@@ -78,8 +92,27 @@ def save_api_keys(
     if exa_key is not None:
         env_map["EXA_API_KEY"] = exa_key
         os.environ["EXA_API_KEY"] = exa_key
+    if stt_engine is not None:
+        env_map["STT_ENGINE"] = stt_engine
+        os.environ["STT_ENGINE"] = stt_engine
+    if whisper_model is not None:
+        env_map["WHISPER_MODEL"] = whisper_model
+        os.environ["WHISPER_MODEL"] = whisper_model
+    if llm_engine is not None:
+        env_map["LLM_ENGINE"] = llm_engine
+        os.environ["LLM_ENGINE"] = llm_engine
+    if ollama_base_url is not None:
+        env_map["OLLAMA_BASE_URL"] = ollama_base_url
+        os.environ["OLLAMA_BASE_URL"] = ollama_base_url
+    if ollama_model is not None:
+        env_map["OLLAMA_MODEL"] = ollama_model
+        os.environ["OLLAMA_MODEL"] = ollama_model
+    if search_engine is not None:
+        env_map["SEARCH_ENGINE"] = search_engine
+        os.environ["SEARCH_ENGINE"] = search_engine
 
     new_content = "\n".join(f"{k}={v}" for k, v in env_map.items()) + "\n"
     env_file.write_text(new_content, encoding="utf-8")
     return reload_settings()
+
 

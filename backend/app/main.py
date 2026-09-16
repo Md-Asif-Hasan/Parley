@@ -156,20 +156,75 @@ async def run_simulation_scenario():
     state_manager.set_status("stopped", "Simulated meeting completed.")
     await broadcast_event("status", {"state": "stopped", "message": "Simulated meeting completed."})
 
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Parley backend server initialized.")
+    from .ollama_client import auto_ensure_default_model
+    asyncio.create_task(auto_ensure_default_model())
+
 @app.get("/health")
 async def health_check():
+    from .ollama_client import is_ollama_running
     return {
         "status": "ok",
         "has_deepgram_key": bool(settings.DEEPGRAM_API_KEY),
-        "has_llm_key": bool(settings.DEEPSEEK_API_KEY or settings.OPENAI_API_KEY),
+        "has_llm_key": bool(settings.DEEPSEEK_API_KEY or settings.OPENAI_API_KEY or is_ollama_running()),
         "has_exa_key": bool(settings.EXA_API_KEY),
+        "ollama_running": is_ollama_running(),
         "deepgram_model": settings.DEEPGRAM_MODEL,
-        "llm_model": settings.DEEPSEEK_MODEL or settings.OPENAI_MODEL
+        "llm_model": settings.DEEPSEEK_MODEL or settings.OLLAMA_MODEL
     }
+
+@app.get("/api/ollama/status")
+async def get_ollama_status_endpoint():
+    from .ollama_client import is_ollama_running, get_installed_ollama_models, pull_status
+    running = is_ollama_running()
+    installed = get_installed_ollama_models() if running else []
+    return {
+        "running": running,
+        "installed_models": installed,
+        "active_model": settings.OLLAMA_MODEL,
+        "pull_status": pull_status
+    }
+
+@app.get("/api/ollama/models")
+async def get_ollama_models_endpoint():
+    from .ollama_client import is_ollama_running, get_installed_ollama_models, RECOMMENDED_MODELS
+    running = is_ollama_running()
+    installed = get_installed_ollama_models() if running else []
+    
+    # Annotate recommendations with installation state
+    models_annotated = []
+    for m in RECOMMENDED_MODELS:
+        item = dict(m)
+        item["is_installed"] = any(m["id"] in inst for inst in installed)
+        item["is_active"] = (settings.OLLAMA_MODEL == m["id"])
+        models_annotated.append(item)
+
+    return {
+        "running": running,
+        "active_model": settings.OLLAMA_MODEL,
+        "installed_models": installed,
+        "recommended_models": models_annotated
+    }
+
+@app.post("/api/ollama/pull")
+async def pull_ollama_model_endpoint(payload: dict):
+    from .ollama_client import is_ollama_running, pull_ollama_model_sync, pull_status
+    model_name = payload.get("model") or settings.OLLAMA_MODEL
+    if not is_ollama_running():
+        return JSONResponse(status_code=400, content={"error": "Ollama service is not running on http://localhost:11434"})
+
+    if pull_status.get("is_pulling"):
+        return {"status": "already_pulling", "pull_status": pull_status}
+
+    asyncio.create_task(asyncio.to_thread(pull_ollama_model_sync, model_name))
+    return {"status": "started", "model": model_name}
 
 @app.get("/api/settings")
 async def get_settings_endpoint():
     from .config import settings, reload_settings
+    from .ollama_client import is_ollama_running
     reload_settings()
     return {
         "has_deepgram_key": bool(settings.DEEPGRAM_API_KEY),
@@ -178,6 +233,13 @@ async def get_settings_endpoint():
         "deepgram_key_masked": f"{settings.DEEPGRAM_API_KEY[:4]}...{settings.DEEPGRAM_API_KEY[-4:]}" if len(settings.DEEPGRAM_API_KEY) > 8 else ("configured" if settings.DEEPGRAM_API_KEY else ""),
         "deepseek_key_masked": f"{settings.DEEPSEEK_API_KEY[:4]}...{settings.DEEPSEEK_API_KEY[-4:]}" if len(settings.DEEPSEEK_API_KEY) > 8 else ("configured" if settings.DEEPSEEK_API_KEY else ""),
         "exa_key_masked": f"{settings.EXA_API_KEY[:4]}...{settings.EXA_API_KEY[-4:]}" if len(settings.EXA_API_KEY) > 8 else ("configured" if settings.EXA_API_KEY else ""),
+        "stt_engine": settings.STT_ENGINE,
+        "whisper_model": settings.WHISPER_MODEL,
+        "llm_engine": settings.LLM_ENGINE,
+        "ollama_base_url": settings.OLLAMA_BASE_URL,
+        "ollama_model": settings.OLLAMA_MODEL,
+        "search_engine": settings.SEARCH_ENGINE,
+        "ollama_running": is_ollama_running(),
     }
 
 @app.post("/api/settings")
@@ -186,16 +248,34 @@ async def save_settings_endpoint(payload: dict):
     deepgram_key = payload.get("deepgram_api_key")
     deepseek_key = payload.get("deepseek_api_key")
     exa_key = payload.get("exa_api_key")
+    stt_engine = payload.get("stt_engine")
+    whisper_model = payload.get("whisper_model")
+    llm_engine = payload.get("llm_engine")
+    ollama_base_url = payload.get("ollama_base_url")
+    ollama_model = payload.get("ollama_model")
+    search_engine = payload.get("search_engine")
+
     new_settings = save_api_keys(
         deepgram_key=deepgram_key.strip() if deepgram_key is not None else None,
         deepseek_key=deepseek_key.strip() if deepseek_key is not None else None,
         exa_key=exa_key.strip() if exa_key is not None else None,
+        stt_engine=stt_engine.strip() if stt_engine is not None else None,
+        whisper_model=whisper_model.strip() if whisper_model is not None else None,
+        llm_engine=llm_engine.strip() if llm_engine is not None else None,
+        ollama_base_url=ollama_base_url.strip() if ollama_base_url is not None else None,
+        ollama_model=ollama_model.strip() if ollama_model is not None else None,
+        search_engine=search_engine.strip() if search_engine is not None else None,
     )
     return {
         "status": "saved",
         "has_deepgram_key": bool(new_settings.DEEPGRAM_API_KEY),
         "has_deepseek_key": bool(new_settings.DEEPSEEK_API_KEY),
         "has_exa_key": bool(new_settings.EXA_API_KEY),
+        "stt_engine": new_settings.STT_ENGINE,
+        "whisper_model": new_settings.WHISPER_MODEL,
+        "llm_engine": new_settings.LLM_ENGINE,
+        "ollama_model": new_settings.OLLAMA_MODEL,
+        "search_engine": new_settings.SEARCH_ENGINE,
     }
 
 @app.get("/api/state")
@@ -215,7 +295,6 @@ async def websocket_meeting_endpoint(websocket: WebSocket):
     active_connections.add(websocket)
     logger.info("New WebSocket connection established.")
 
-    # Send initial state snapshot and ready status
     try:
         await websocket.send_text(
             json.dumps({"type": "state.init", "data": state_manager.get_export_data()})
@@ -248,7 +327,6 @@ async def websocket_meeting_endpoint(websocket: WebSocket):
 
                 if event_type == "meeting.start":
                     logger.info("Received meeting.start event")
-                    # Cancel any running simulation
                     if simulation_task and not simulation_task.done():
                         simulation_task.cancel()
 
@@ -258,10 +336,29 @@ async def websocket_meeting_endpoint(websocket: WebSocket):
                     state_manager.set_status("recording", "Recording in progress...")
                     await broadcast_event("status", {"state": "recording", "message": "Recording started."})
 
-                    # Start Deepgram streaming client if API key is present
                     from .config import reload_settings
                     curr_settings = reload_settings()
-                    if curr_settings.DEEPGRAM_API_KEY:
+
+                    use_whisper = (curr_settings.STT_ENGINE == "whisper") or (
+                        curr_settings.STT_ENGINE == "auto" and not curr_settings.DEEPGRAM_API_KEY
+                    )
+
+                    if use_whisper:
+                        from .local_whisper import LocalWhisperClient
+                        try:
+                            logger.info(f"Starting Local Faster-Whisper client (Model: {curr_settings.WHISPER_MODEL})")
+                            deepgram_client = LocalWhisperClient(
+                                on_partial=handle_partial_transcript,
+                                on_final=handle_final_utterances,
+                                id_generator=state_manager.next_utterance_id,
+                                sample_rate=sample_rate,
+                                whisper_model_name=curr_settings.WHISPER_MODEL
+                            )
+                            await deepgram_client.start()
+                        except Exception as e:
+                            logger.error(f"Failed to start Local Faster-Whisper client: {e}")
+                            await broadcast_event("error", {"message": f"Local Whisper engine error: {str(e)}"})
+                    elif curr_settings.DEEPGRAM_API_KEY:
                         try:
                             deepgram_client = DeepgramLiveClient(
                                 api_key=curr_settings.DEEPGRAM_API_KEY,
@@ -277,6 +374,7 @@ async def websocket_meeting_endpoint(websocket: WebSocket):
                         except Exception as e:
                             logger.error(f"Failed to start Deepgram client: {e}")
                             await broadcast_event("error", {"message": f"Deepgram connection failed: {str(e)}"})
+
                     else:
                         logger.warning("No DEEPGRAM_API_KEY set. Audio input will not be transcribed without key. Use simulation mode or provide key in .env.")
                         await broadcast_event("error", {"message": "No DEEPGRAM_API_KEY configured in backend. Use Mock Simulation or add key."})

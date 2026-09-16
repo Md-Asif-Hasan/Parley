@@ -53,24 +53,34 @@ def clean_json_string(raw: str) -> str:
             text = match.group(1).strip()
     return text
 
+from .duckduckgo_client import search_duckduckgo_sync, format_ddg_results
+from .ollama_client import is_ollama_running
+
 class MeetingAgent:
     def __init__(self):
-        # Prefer DEEPSEEK credentials if provided
-        if settings.DEEPSEEK_API_KEY:
+        use_ollama = settings.LLM_ENGINE == "ollama" or (
+            settings.LLM_ENGINE == "auto" and not settings.DEEPSEEK_API_KEY and not settings.OPENAI_API_KEY
+        )
+
+        if use_ollama:
+            base_url = (settings.OLLAMA_BASE_URL or "http://localhost:11434").rstrip("/")
+            self.endpoint = f"{base_url}/v1/chat/completions"
+            self.api_key = "ollama"
+            self.model = settings.OLLAMA_MODEL or "deepseek-r1:1.5b"
+            self.is_local = True
+            logger.info(f"MeetingAgent initialized with Ollama Local LLM ({self.model} at {self.endpoint}).")
+        elif settings.DEEPSEEK_API_KEY:
             self.api_key = settings.DEEPSEEK_API_KEY
             base_url = settings.DEEPSEEK_BASE_URL.rstrip("/")
             self.model = settings.DEEPSEEK_MODEL or "deepseek-chat"
+            self.endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
+            self.is_local = False
         else:
             self.api_key = settings.OPENAI_API_KEY
             base_url = (settings.OPENAI_BASE_URL or "https://api.deepseek.com").rstrip("/")
             self.model = settings.OPENAI_MODEL or "deepseek-chat"
-
-        if not base_url.endswith("/v1") and not base_url.endswith("/chat/completions"):
-            self.endpoint = f"{base_url}/chat/completions"
-        elif base_url.endswith("/v1"):
-            self.endpoint = f"{base_url}/chat/completions"
-        else:
-            self.endpoint = base_url
+            self.endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
+            self.is_local = False
 
     def _sync_post(self, messages: list, json_mode: bool = False, temperature: float = 0.2) -> str:
         headers = {
@@ -82,7 +92,7 @@ class MeetingAgent:
             "messages": messages,
             "temperature": temperature
         }
-        if json_mode:
+        if json_mode and not self.is_local:
             body["response_format"] = {"type": "json_object"}
 
         req = urllib.request.Request(
@@ -91,9 +101,13 @@ class MeetingAgent:
             data=json.dumps(body).encode("utf-8")
         )
 
-        with urllib.request.urlopen(req, timeout=40) as resp:
+        with urllib.request.urlopen(req, timeout=90) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"] or ""
+            content = data["choices"][0]["message"]["content"] or ""
+            # Strip reasoning tokens <think>...</think> if returned by local DeepSeek-R1 model
+            if "<think>" in content and "</think>" in content:
+                content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+            return content
 
     async def update_analysis(
         self,
@@ -103,8 +117,8 @@ class MeetingAgent:
         if not transcript_text.strip():
             return previous_analysis or AnalysisResult()
 
-        if not self.api_key or self.api_key == "mock-key":
-            logger.warning("No API key configured. Returning previous or empty analysis.")
+        if not self.is_local and (not self.api_key or self.api_key == "mock-key"):
+            logger.warning("No API key or Local LLM configured. Returning previous or empty analysis.")
             return previous_analysis or AnalysisResult()
 
         prompt = f"""Current Meeting Transcript:
@@ -140,38 +154,40 @@ Please provide the updated, complete replacement analysis JSON object based on t
         if not trimmed_q:
             return "Please provide a question."
 
-        if not self.api_key or self.api_key == "mock-key":
-            return f"Agent Question Answering requires API key configured. Question asked: '{question}'"
+        if not self.is_local and (not self.api_key or self.api_key == "mock-key"):
+            return f"Agent Question Answering requires API key or Local Ollama configured. Question asked: '{question}'"
 
-        # Determine if we should perform an Exa web search
-        # Perform search if Exa key exists and question involves lookups, unknown topics, external facts, or research
+        # Determine web search engine (Exa Cloud vs DuckDuckGo Free)
         web_context = ""
-        if settings.EXA_API_KEY:
-            # Check if query asks for definitions, external lookups, search, or general knowledge
-            should_search = any(
-                keyword in trimmed_q.lower()
-                for keyword in [
-                    "search", "lookup", "look up", "what is", "what are", "who is", "how to", "how does",
-                    "explain", "overview", "documentation", "latest", "news", "trend", "pricing", "cost",
-                    "competitor", "vs", "versus", "article", "website", "online", "github", "exa", "process",
-                    "concept", "tool", "framework", "library", "spec", "standard"
-                ]
-            ) or len(transcript_text.strip()) == 0 or len(trimmed_q.split()) <= 4
+        should_search = any(
+            keyword in trimmed_q.lower()
+            for keyword in [
+                "search", "lookup", "look up", "what is", "what are", "who is", "how to", "how does",
+                "explain", "overview", "documentation", "latest", "news", "trend", "pricing", "cost",
+                "competitor", "vs", "versus", "article", "website", "online", "github", "exa", "process",
+                "concept", "tool", "framework", "library", "spec", "standard"
+            ]
+        ) or len(transcript_text.strip()) == 0 or len(trimmed_q.split()) <= 4
 
-            if should_search:
+        if should_search:
+            use_exa = (settings.SEARCH_ENGINE == "exa" or (settings.SEARCH_ENGINE == "auto" and settings.EXA_API_KEY))
+            if use_exa and settings.EXA_API_KEY:
                 try:
                     logger.info(f"Triggering Exa web search for query: {trimmed_q}")
-                    search_results = await asyncio.to_thread(
-                        search_exa_sync,
-                        settings.EXA_API_KEY,
-                        trimmed_q,
-                        4
-                    )
+                    search_results = await asyncio.to_thread(search_exa_sync, settings.EXA_API_KEY, trimmed_q, 4)
                     if search_results:
                         web_context = "\n\n" + format_exa_results(search_results)
-                        logger.info(f"Retrieved {len(search_results)} Exa search results")
                 except Exception as e:
                     logger.warning(f"Exa search during QA failed: {e}")
+            else:
+                try:
+                    logger.info(f"Triggering DuckDuckGo Free Web Search for query: {trimmed_q}")
+                    ddg_results = await asyncio.to_thread(search_duckduckgo_sync, trimmed_q, 4)
+                    if ddg_results:
+                        web_context = "\n\n" + format_ddg_results(ddg_results)
+                except Exception as e:
+                    logger.warning(f"DuckDuckGo search during QA failed: {e}")
+
 
         context_blocks = []
         if transcript_text.strip():
