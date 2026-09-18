@@ -15,7 +15,8 @@ if os.path.isdir(frontend_dist) and os.path.exists(os.path.join(frontend_dist, "
 
 for pkg in ["uvicorn", "fastapi", "starlette", "pydantic", "pydantic_settings",
             "websockets", "httpx", "anyio", "click", "h11",
-            "python_dotenv", "dotenv", "playwright", "pyautogui", "mss", "pynput", "PIL"]:
+            "python_dotenv", "dotenv", "playwright", "pyautogui", "mss", "pynput", "PIL",
+            "duckduckgo_search", "faster_whisper"]:
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -39,12 +40,13 @@ hiddenimports += [
     "email.mime.text", "email.mime.multipart", "email.mime.base",
     "app", "app.main", "app.config", "app.models",
     "app.state", "app.agent", "app.deepgram_client", "app.mock_data",
-    "app.exa_client",
+    "app.exa_client", "app.duckduckgo_client", "app.ollama_client", "app.local_whisper",
     "app.autopilot", "app.autopilot.action_planner", "app.autopilot.browser_agent",
     "app.autopilot.os_agent", "app.autopilot.voice_renamer", "app.autopilot.utils",
     "PIL", "PIL.Image", "pyautogui", "mss", "pynput",
-    "dotenv",
+    "dotenv", "duckduckgo_search", "faster_whisper"
 ]
+
 
 # Remove duplicates
 hiddenimports = list(set(hiddenimports))
