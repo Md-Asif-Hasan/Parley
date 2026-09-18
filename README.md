@@ -4,6 +4,8 @@
 
 Parley is available as a **Native Desktop Application for Windows** (with macOS/Linux support), a **Single-Container Docker App**, and a **Web Application**.
 
+> **v1.1.0** — 🆓 **100% Free Local Mode** added: Faster-Whisper (offline STT) + Ollama (local LLM with auto-downloaded DeepSeek-R1) + DuckDuckGo (free web search). No API keys or internet required!
+
 ---
 
 ## 🚀 Quick Download & Install (Windows)
@@ -28,13 +30,35 @@ Download the ready-to-run desktop application from [**GitHub Releases**](https:/
 
 ---
 
+## 🆓 100% Free Local Mode (No API Keys Required)
+
+Parley works **completely offline** without any paid subscriptions or API keys:
+
+| Component | Free Local | Cloud (Optional) |
+|---|---|---|
+| 🎤 **Speech-to-Text** | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) (runs on CPU/GPU locally) | Deepgram Nova-3 |
+| 🧠 **AI / LLM** | [Ollama](https://ollama.ai) + DeepSeek-R1 (auto-downloaded on first run) | DeepSeek Cloud API |
+| 🔍 **Web Search** | [DuckDuckGo](https://duckduckgo.com) (zero-key, no account needed) | Exa Neural Search |
+
+### How Local Mode Works
+1. **Install Parley** — that's it. No extra setup.
+2. **First launch**: If [Ollama](https://ollama.com/download) is installed, Parley auto-downloads `deepseek-r1:1.5b` (~1 GB) in the background.
+3. **Open Settings** → *Local Free Mode* tab to:
+   - Install additional Ollama models (Phi-3 Mini, Gemma 2B, LLaMA 3.2) based on your hardware
+   - Switch between Local / Cloud engines for STT, LLM, and Search independently
+4. Parley auto-detects which mode to use: if no API keys are set, it falls back to the free local stack automatically.
+
+> **Installing Ollama**: Download from [ollama.com/download](https://ollama.com/download) (free, runs models locally). Parley will auto-pull the default model on startup.
+
+---
+
 ## ⚡ Core Features
 
-- **Live Streaming Diarization**: Low-latency speech capture with Deepgram Nova-3 (`diarize=true`, `utterance_end_ms=5000`).
+- **Live Streaming Diarization**: Low-latency speech capture with Deepgram Nova-3 (`diarize=true`, `utterance_end_ms=5000`) — or **Faster-Whisper** locally for free.
 - **Real-Time Interim Captions**: See live drafting captions that fluidly finalize into speaker-attributed transcript blocks.
 - **Voice-Driven Speaker Renaming**: Spoken self-introductions (*"Hi, my name is Alex..."*, *"I am Sarah from design"*) and explicit commands (*"Speaker 1 is Bob"*) automatically update participant names in real time.
-- **Dynamic Insight Extraction**: Periodic AI analysis powered by DeepSeek (`deepseek-chat`) detailing participant viewpoints, incompatible proposal warnings, and consensus checklists.
-- **Exa Neural Web Search & Scraping**: Built-in Exa AI search engine that automatically looks up unknown processes, technologies, documentation, and external facts in real time, synthesizing raw web data into human-readable insights with citations.
+- **Dynamic Insight Extraction**: Periodic AI analysis powered by DeepSeek cloud (`deepseek-chat`) or **local Ollama** (DeepSeek-R1, Phi-3, Gemma 2B, LLaMA 3.2) — your choice.
+- **Web Search & Scraping**: Built-in **DuckDuckGo** (free, no key) or Exa AI Neural Search (cloud, with key) — automatically looks up unknown processes, technologies, and external facts in real time.
 - **Autonomous Autopilot Engine**:
   - **Browser Automation**: Automated social posting (Twitter/X, LinkedIn, Facebook), messaging (WhatsApp Web, Telegram), and web actions using persistent Chromium profiles (`~/.parley/browser_profile`) that remember your logins.
   - **OS & Screen Control**: Full-screen vision, screenshot inspection, and mouse/keyboard automation via PyAutoGUI & mss with global `Esc` emergency stop.
@@ -68,9 +92,12 @@ Parley/
 │   │   ├── config.py                 # Pydantic settings & environment manager
 │   │   ├── models.py                 # Pydantic data schemas (Utterance, Analysis, etc.)
 │   │   ├── state.py                  # In-memory thread-safe meeting state manager
-│   │   ├── agent.py                  # DeepSeek LLM agent loop & QA engine
+│   │   ├── agent.py                  # DeepSeek/Ollama LLM agent loop & QA engine
 │   │   ├── deepgram_client.py        # Deepgram Nova-3 live WebSocket client
+│   │   ├── local_whisper.py          # 🆓 Faster-Whisper offline STT client
+│   │   ├── ollama_client.py          # 🆓 Ollama local LLM client with auto model pull
 │   │   ├── exa_client.py             # Exa AI Neural Web Search & content scraper
+│   │   ├── duckduckgo_client.py      # 🆓 DuckDuckGo free web search client
 │   │   ├── mock_data.py              # Offline multi-speaker meeting simulation
 │   │   └── autopilot/                # Autonomous Agent System
 │   │       ├── action_planner.py     # Intent classifier & blueprint generator
